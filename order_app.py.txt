@@ -1,0 +1,72 @@
+import streamlit as st
+import requests
+import uuid
+
+st.set_page_config(page_title="Order Placement", page_icon="🛒")
+
+st.title("🛒 Place Your Order")
+st.write("Fill in the details below to submit an order.")
+
+# n8n Webhook URL (apna Production URL yahan daalo)
+WEBHOOK_URL = "https://murshad123456.app.n8n.cloud/webhook/order-notification"
+
+# Available products (aapki Google Sheet ke mutabiq)
+PRODUCTS = {
+    "P001": "Wireless Mouse",
+    "P002": "Mechanical Keyboard",
+    "P003": "USB-C Cable"
+}
+
+# --- Order Form ---
+with st.form("order_form"):
+    st.subheader("Customer Details")
+    customer_name = st.text_input("Full Name")
+    customer_email = st.text_input("Email Address")
+
+    st.subheader("Order Items")
+    num_items = st.number_input("How many different products?", min_value=1, max_value=5, value=1)
+
+    items = []
+    for i in range(int(num_items)):
+        col1, col2 = st.columns(2)
+        with col1:
+            product = st.selectbox(
+                f"Product {i+1}",
+                options=list(PRODUCTS.keys()),
+                format_func=lambda x: f"{x} - {PRODUCTS[x]}",
+                key=f"product_{i}"
+            )
+        with col2:
+            quantity = st.number_input(f"Quantity {i+1}", min_value=1, value=1, key=f"qty_{i}")
+        items.append({"product_id": product, "quantity": quantity})
+
+    submitted = st.form_submit_button("Submit Order")
+
+# --- On Submit ---
+if submitted:
+    if not customer_name or not customer_email:
+        st.error("Please fill in your name and email.")
+    else:
+        order_id = f"ORD-{uuid.uuid4().hex[:8].upper()}"
+
+        payload = {
+            "order_id": order_id,
+            "customer_name": customer_name,
+            "customer_email": customer_email,
+            "items": items
+        }
+
+        with st.spinner("Processing your order..."):
+            try:
+                response = requests.post(WEBHOOK_URL, json=payload, timeout=30)
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get("status") == "success":
+                        st.success(f"✅ Order placed successfully! Order ID: {result.get('order_id')}")
+                        st.balloons()
+                    else:
+                        st.error(f"❌ {result.get('message', 'Something went wrong.')}")
+                else:
+                    st.error(f"Server error: {response.status_code}")
+            except Exception as e:
+                st.error(f"Failed to connect: {str(e)}")
